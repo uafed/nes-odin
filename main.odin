@@ -23,7 +23,8 @@ CpuState :: struct {
 	stack_ptr:       u16,
 	status:          bit_set[Flags;u8],
 	program_counter: u16,
-	memory:          [2048]u8,
+	memory:          [64 * 1024]u8,
+	internal_memory: []u8,
 }
 
 ZeroPageDirect :: struct {
@@ -130,16 +131,17 @@ main :: proc() {
 	}
 
 	fmt.fprintf(os.stdout, "magic: \"%s\"\n", rom.header.magic)
-	fmt.fprintf(os.stdout, "program_size: %d\n", u32(rom.header.program_size) * 16 * 1024)
-	fmt.fprintf(os.stdout, "program_data: %d\n", rom.program_data[:])
+	fmt.fprintf(os.stdout, "program_size (header): %d\n", u32(rom.header.program_size) * 16 * 1024)
+	fmt.fprintf(os.stdout, "program_data (actual): %d\n", len(rom.program_data))
 
 	state := CpuState{}
-
-	_ = state.memory[state.program_counter]
-	_ = Instruction {
-		opcode = .ADC,
-		input  = ZeroPage(ZeroPageDirect{}),
-	}
+	state.accumulator = 0
+	state.x_index = 0
+	state.y_index = 0
+	state.stack_ptr = 0xfd
+	state.status = {.InterruptDisable}
+	state.program_counter = 0xfffc
+	state.internal_memory = state.memory[0:2048]
 
 	for {
 		event: sdl2.Event
@@ -155,5 +157,4 @@ main :: proc() {
 			}
 		}
 	}
-
 }
