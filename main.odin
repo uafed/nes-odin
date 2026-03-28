@@ -7,79 +7,6 @@ import "core:mem"
 import "core:os"
 import "vendor:sdl2"
 
-Flags :: enum {
-	Carry            = 0,
-	Zero             = 1,
-	InterruptDisable = 2,
-	Decimal          = 3,
-	Overflow         = 6,
-	Negative         = 7,
-}
-
-CpuState :: struct {
-	accumulator:     u8,
-	x_index:         u8,
-	y_index:         u8,
-	stack_ptr:       u16,
-	status:          bit_set[Flags;u8],
-	program_counter: u16,
-	memory:          [64 * 1024]u8,
-	internal_memory: []u8,
-}
-
-ZeroPageDirect :: struct {
-	oper: u8,
-}
-
-Index :: enum {
-	X,
-	Y,
-}
-
-ZeroPageIndexed :: struct {
-	operand: u8,
-	index:   Index,
-}
-
-ZeroPage :: union {
-	ZeroPageDirect,
-	ZeroPageIndexed,
-}
-
-Accumulator :: struct {}
-
-AbsoluteDirect :: struct {
-	address: u16,
-}
-
-AbsoluteIndexed :: struct {
-	index: Index,
-}
-
-Absolute :: union {
-	AbsoluteIndexed,
-}
-
-Immediate :: struct {
-	operand: u8,
-}
-
-AddressingMode :: union {
-	ZeroPage,
-	Absolute,
-	Immediate,
-	Accumulator,
-}
-
-Opcode :: enum {
-	ADC,
-}
-
-Instruction :: struct {
-	opcode: Opcode,
-	input:  AddressingMode,
-}
-
 NATIVE_SCREEN_WIDTH :: 256
 NATIVE_SCREEN_HEIGHT :: 240
 WINDOW_SCALE :: 4
@@ -156,5 +83,61 @@ main :: proc() {
 				}
 			}
 		}
+
+		// fetch & decode instructions
+		instruction := fetch_and_decode_instruction(&state)
+		if instruction == nil {
+			fmt.fprintf(os.stderr, "Unrecognized instruction:", instruction)
+		}
+
+		switch instr in instruction {
+		case AddWithCarry:
+			switch mode in instr {
+			case Immediate:
+			case ZeroPageDirect:
+			case ZeroPageIndexed:
+			case AbsoluteDirect:
+			case AbsoluteIndexed:
+			}
+		}
 	}
+}
+
+fetch_next_byte :: proc(state: ^CpuState) -> u8 {
+	value := state.memory[state.program_counter]
+	state.program_counter += 1
+	return value
+}
+
+fetch_next_u16 :: proc(state: ^CpuState) -> u16 {
+	high := state.memory[state.program_counter]
+	state.program_counter += 1
+	low := state.memory[state.program_counter]
+	state.program_counter += 1
+	return (u16(high) << 8) | u16(low)
+}
+
+
+fetch_and_decode_instruction :: proc(state: ^CpuState) -> Instruction {
+	opcode := fetch_next_byte(state)
+	switch opcode {
+	// Add width carry
+	case 0x69:
+		return AddWithCarry(Immediate{operand = fetch_next_byte(state)})
+	case 0x65:
+		return AddWithCarry(ZeroPageDirect{operand = fetch_next_byte(state)})
+	case 0x75:
+		return AddWithCarry(ZeroPageIndexed{operand = fetch_next_byte(state), index = .X})
+	case 0x6D:
+		return AddWithCarry(AbsoluteDirect{address = fetch_next_u16(state)})
+	case 0x7D:
+		return AddWithCarry(AbsoluteIndexed{operand = fetch_next_byte(state), index = .X})
+	case 0x79:
+		return AddWithCarry(AbsoluteIndexed{operand = fetch_next_byte(state), index = .Y})
+	case 0x61:
+		return AddWithCarry(IndirectIndexed{operand = fetch_next_byte(state), index = .X})
+	case 0x71:
+		return AddWithCarry(IndirectIndexed{operand = fetch_next_byte(state), index = .Y})
+	}
+	return nil
 }
